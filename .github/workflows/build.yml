@@ -29,13 +29,12 @@ jobs:
         cd $HOME
         wget https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
         unzip -q commandlinetools-linux-9477386_latest.zip
-        mkdir -p android-sdk
-        cp -r cmdline-tools android-sdk/
-        cd android-sdk/cmdline-tools
-        mv cmdline-tools latest
-        cd $HOME/android-sdk/cmdline-tools/latest/bin
-        yes | ./sdkmanager --licenses
-        ./sdkmanager "build-tools;33.0.0" "platforms;android-33"
+        ls -la
+        mkdir -p $HOME/android-sdk/cmdline-tools
+        cp -r $HOME/cmdline-tools $HOME/android-sdk/cmdline-tools/latest
+        ls -la $HOME/android-sdk/cmdline-tools/latest/bin
+        yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk --licenses
+        $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "build-tools;33.0.0" "platforms;android-33"
     
     - name: Set Android SDK path
       run: |
