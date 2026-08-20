@@ -1,147 +1,23 @@
-name: Build APK
-
-on:
-  push:
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-22.04
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          java-version: "17"
-          distribution: "temurin"
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            wget \
-            curl \
-            build-essential \
-            autoconf \
-            automake \
-            libtool \
-            libltdl-dev \
-            pkg-config \
-            cmake \
-            libffi-dev \
-            libssl-dev \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            openjdk-17-jdk
-
-      - name: Install Buildozer
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython<3"
-          python -m pip install buildozer
-
-      - name: Clean old Buildozer files
-        run: |
-          rm -rf "$HOME/.buildozer"
-          rm -rf ".buildozer"
-
-      - name: Configure buildozer.spec
-        run: |
-          if grep -q "^android.accept_sdk_license" buildozer.spec; then
-            sed -i 's/^android.accept_sdk_license.*/android.accept_sdk_license = True/' buildozer.spec
-          else
-            printf '\nandroid.accept_sdk_license = True\n' >> buildozer.spec
-          fi
-
-      - name: Download Android SDK for Buildozer
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          mkdir -p "$SDK/cmdline-tools"
-
-          cd /tmp
-
-          wget -q \
-            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
-            -O commandlinetools.zip
-
-          unzip -q commandlinetools.zip
-
-          mkdir -p "$SDK/cmdline-tools/latest"
-
-          cp -r cmdline-tools/* "$SDK/cmdline-tools/latest/"
-
-          mkdir -p "$SDK/tools/bin"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            "$SDK/tools/bin/sdkmanager"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/avdmanager" \
-            "$SDK/tools/bin/avdmanager"
-
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
-
-      - name: Install Android packages
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          yes | "$SDK/tools/bin/sdkmanager" \
-            --sdk_root="$SDK" \
-            --licenses || true
-
-          "$SDK/tools/bin/sdkmanager" \
-            --sdk_root="$SDK" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2"
-
-      - name: Verify SDK and AIDL
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          echo "sdkmanager:"
-          ls -l "$SDK/tools/bin/sdkmanager"
-
-          echo "AIDL:"
-          ls -l "$SDK/build-tools/33.0.2/aidl"
-
-          test -f "$SDK/tools/bin/sdkmanager"
-          test -f "$SDK/build-tools/33.0.2/aidl"
-
-      - name: Download Buildozer Android dependencies
-        run: |
-          buildozer android p4a -- --help
-
       - name: Build APK
         run: |
-          buildozer -v android debug
+          set +e
 
-      - name: Find APK
+          timeout 45m buildozer -v android debug 2>&1 | tee build.log
+
+          STATUS=${PIPESTATUS[0]}
+
+          echo "=============================="
+          echo "BUILDOZER EXIT CODE: $STATUS"
+          echo "=============================="
+
+          echo "===== LAST 100 LINES ====="
+          tail -n 100 build.log
+
+          exit $STATUS
+                - name: Upload build log
         if: always()
-        run: |
-          find . -type f -name "*.apk" -print || true
-
-      - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: guard-app-apk
-          path: bin/*.apk
-          if-no-files-found: error
+          name: build-log
+          path: build.log
+          if-no-files-found: warn
