@@ -15,7 +15,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.14"
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -23,121 +23,90 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             git \
             zip \
             unzip \
-            wget \
-            curl \
-            build-essential \
+            openjdk-17-jdk \
+            python3-pip \
+            python3-venv \
+            python3-dev \
             autoconf \
             automake \
             libtool \
             libltdl-dev \
             pkg-config \
-            cmake \
-            libffi-dev \
-            libssl-dev \
             zlib1g-dev \
             libncurses5-dev \
             libncursesw5-dev \
-            openjdk-17-jdk
+            libtinfo6 \
+            cmake \
+            libffi-dev \
+            libssl-dev \
+            build-essential \
+            gettext \
+            autopoint \
+            rustc \
+            cargo
 
-      - name: Install Buildozer
+      - name: Install Python build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython<3"
-          python -m pip install buildozer
 
-      - name: Clean old Buildozer files
+          python -m pip install \
+            "Cython==0.29.34" \
+            "virtualenv" \
+            "legacy-cgi"
+
+          python -m pip install --upgrade \
+            "git+https://github.com/kivy/buildozer.git"
+
+      - name: Show versions
+        run: |
+          python --version
+          pip --version
+          cython --version
+          buildozer --version
+          java -version
+
+      - name: Clean previous Android build
         run: |
           rm -rf "$HOME/.buildozer"
           rm -rf ".buildozer"
+          rm -rf "bin"
 
-      - name: Prepare Android SDK
+      - name: Verify buildozer.spec
         run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          mkdir -p "$SDK/cmdline-tools"
-
-          cd /tmp
-
-          wget -q \
-            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
-            -O commandlinetools.zip
-
-          unzip -q commandlinetools.zip
-
-          mkdir -p "$SDK/cmdline-tools/latest"
-
-          cp -r cmdline-tools/* "$SDK/cmdline-tools/latest/"
-
-          mkdir -p "$SDK/tools/bin"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/sdkmanager" \
-            "$SDK/tools/bin/sdkmanager"
-
-          ln -sf \
-            "$SDK/cmdline-tools/latest/bin/avdmanager" \
-            "$SDK/tools/bin/avdmanager"
-
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/tools/bin" >> "$GITHUB_PATH"
-
-      - name: Install Android SDK packages
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          yes | "$SDK/tools/bin/sdkmanager" \
-            --sdk_root="$SDK" \
-            --licenses || true
-
-          "$SDK/tools/bin/sdkmanager" \
-            --sdk_root="$SDK" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2"
-
-      - name: Verify SDK and AIDL
-        run: |
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          echo "SDK:"
-          echo "$SDK"
-
-          echo "sdkmanager:"
-          ls -l "$SDK/tools/bin/sdkmanager"
-
-          echo "AIDL:"
-          ls -l "$SDK/build-tools/33.0.2/aidl"
-
-          test -f "$SDK/tools/bin/sdkmanager"
-          test -f "$SDK/build-tools/33.0.2/aidl"
-
-          chmod +x "$SDK/build-tools/33.0.2/aidl"
-
-          echo "AIDL FOUND"
+          test -f buildozer.spec
+          echo "===== buildozer.spec ====="
+          cat buildozer.spec
 
       - name: Build APK
         run: |
           set +e
-          timeout 45m buildozer -v android debug 2>&1 | tee build.log
+
+          buildozer -v android debug 2>&1 | tee build.log
+
           STATUS=${PIPESTATUS[0]}
 
-          echo "=============================="
+          echo "========================================"
           echo "BUILDOZER EXIT CODE: $STATUS"
-          echo "=============================="
+          echo "========================================"
 
-          echo "===== LAST 100 LINES ====="
-          tail -n 100 build.log
+          echo "===== LAST 120 LOG LINES ====="
+          tail -n 120 build.log
 
           exit $STATUS
+
+      - name: Find APK
+        if: always()
+        run: |
+          echo "===== APK FILES ====="
+          find . -type f -name "*.apk" -print || true
 
       - name: Upload build log
         if: always()
@@ -146,12 +115,6 @@ jobs:
           name: build-log
           path: build.log
           if-no-files-found: warn
-
-      - name: Find APK
-        if: always()
-        run: |
-          echo "===== APK FILES ====="
-          find . -type f -name "*.apk" -print || true
 
       - name: Upload APK
         if: success()
