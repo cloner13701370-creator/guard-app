@@ -1,3 +1,4 @@
+```yaml
 name: Build APK
 
 "on":
@@ -23,14 +24,15 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             git \
             zip \
             unzip \
-            wget \
+            openjdk-17-jdk \
             build-essential \
             autoconf \
             automake \
@@ -44,79 +46,49 @@ jobs:
             libncurses5-dev \
             libncursesw5-dev
 
-      - name: Install Buildozer
+      - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "Cython<3"
-          python -m pip install buildozer
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade setuptools wheel
 
-      - name: Show Buildozer version
+          python -m pip install "Cython<3"
+
+          python -m pip install --upgrade buildozer
+
+      - name: Check versions
         run: |
+          python --version
+          java -version
+          cython --version
           buildozer --version
 
-      - name: Prepare Buildozer SDK
+      - name: Clean old Buildozer files
         run: |
-          rm -rf "$HOME/.buildozer"
-          rm -rf ".buildozer"
+          rm -rf ~/.buildozer
+          rm -rf .buildozer
 
-          SDK="$HOME/.buildozer/android/platform/android-sdk"
-
-          mkdir -p "$SDK/cmdline-tools"
-
-          cd /tmp
-
-          wget -q \
-            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
-            -O sdk-tools.zip
-
-          unzip -q sdk-tools.zip
-
-          mkdir -p "$SDK/cmdline-tools/latest"
-
-          cp -r cmdline-tools/* "$SDK/cmdline-tools/latest/"
-
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-
-          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
-          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
-
-      - name: Install Android SDK
+      - name: Enable Android SDK license
         run: |
-          sdkmanager --sdk_root="$ANDROID_HOME" --licenses <<EOF
-          y
-          y
-          y
-          y
-          y
-          y
-          y
-          y
-          y
-          y
-          EOF
+          if grep -q "^android.accept_sdk_license" buildozer.spec; then
+            sed -i \
+              "s/^android.accept_sdk_license.*/android.accept_sdk_license = True/" \
+              buildozer.spec
+          else
+            printf "\nandroid.accept_sdk_license = True\n" >> buildozer.spec
+          fi
 
-          sdkmanager --sdk_root="$ANDROID_HOME" \
-            "platform-tools" \
-            "platforms;android-33" \
-            "build-tools;33.0.2"
+          echo "===== buildozer.spec ====="
+          cat buildozer.spec
 
-      - name: Verify AIDL
+      - name: Install Android prerequisites
         run: |
-          echo "SDK:"
-          echo "$ANDROID_HOME"
+          buildozer android p4a -- --help
 
-          echo "Build tools:"
-          ls -la "$ANDROID_HOME/build-tools"
-
-          echo "AIDL:"
-          ls -la "$ANDROID_HOME/build-tools/33.0.2/aidl"
-
-          test -f "$ANDROID_HOME/build-tools/33.0.2/aidl"
-
-          chmod +x "$ANDROID_HOME/build-tools/33.0.2/aidl"
-
-          "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>&1 || true
+      - name: Show Android SDK
+        run: |
+          echo "===== BUILDOVER SDK ====="
+          find ~/.buildozer/android/platform -maxdepth 4 -type f \
+            \( -name sdkmanager -o -name aidl \) -print || true
 
       - name: Build APK
         run: |
@@ -125,6 +97,7 @@ jobs:
       - name: Find APK
         if: always()
         run: |
+          echo "===== APK FILES ====="
           find . -type f -name "*.apk" -print || true
 
       - name: Upload APK
@@ -134,3 +107,4 @@ jobs:
           name: guard-app-apk
           path: bin/*.apk
           if-no-files-found: error
+```
