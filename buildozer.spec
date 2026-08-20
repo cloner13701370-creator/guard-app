@@ -11,7 +11,7 @@ fullscreen = 0
 android.permissions = INTERNET
 android.api = 33
 android.minapi = 21
-android.archs = arm64-v8a
+android.archs = armeabi-v7a, arm64-v8a
 
 [buildozer]
 log_level = 1
