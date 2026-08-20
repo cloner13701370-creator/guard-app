@@ -5,7 +5,7 @@ package.domain = org.guard
 source.dir = .
 source.include_exts = py,png,jpg,kv,atlas,db
 version = 0.1
-requirements = python3,kivy,sqlite3
+requirements = kivy
 orientation = portrait
 fullscreen = 0
 android.permissions = INTERNET
@@ -14,5 +14,5 @@ android.minapi = 21
 android.archs = armeabi-v7a, arm64-v8a
 
 [buildozer]
-log_level = 1
+log_level = 2
 warn_on_root = 1
