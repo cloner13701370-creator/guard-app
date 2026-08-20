@@ -30,35 +30,93 @@ jobs:
             git \
             zip \
             unzip \
+            wget \
             build-essential \
             autoconf \
             automake \
             libtool \
+            libltdl-dev \
             pkg-config \
             cmake \
             libffi-dev \
             libssl-dev \
             zlib1g-dev \
             libncurses5-dev \
-            libncursesw5-dev \
-            openjdk-17-jdk
+            libncursesw5-dev
 
-      - name: Install Python packages
+      - name: Install Buildozer
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython<3"
           python -m pip install buildozer
 
-      - name: Clean Buildozer
+      - name: Show Buildozer version
         run: |
-          rm -rf ~/.buildozer
-          rm -rf .buildozer
+          buildozer --version
 
-      - name: Check project
+      - name: Prepare Buildozer SDK
         run: |
-          echo "Checking project..."
-          test -f buildozer.spec
-          echo "buildozer.spec found"
+          rm -rf "$HOME/.buildozer"
+          rm -rf ".buildozer"
+
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+
+          mkdir -p "$SDK/cmdline-tools"
+
+          cd /tmp
+
+          wget -q \
+            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
+            -O sdk-tools.zip
+
+          unzip -q sdk-tools.zip
+
+          mkdir -p "$SDK/cmdline-tools/latest"
+
+          cp -r cmdline-tools/* "$SDK/cmdline-tools/latest/"
+
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+
+          echo "$SDK/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$SDK/platform-tools" >> "$GITHUB_PATH"
+
+      - name: Install Android SDK
+        run: |
+          sdkmanager --sdk_root="$ANDROID_HOME" --licenses <<EOF
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          y
+          EOF
+
+          sdkmanager --sdk_root="$ANDROID_HOME" \
+            "platform-tools" \
+            "platforms;android-33" \
+            "build-tools;33.0.2"
+
+      - name: Verify AIDL
+        run: |
+          echo "SDK:"
+          echo "$ANDROID_HOME"
+
+          echo "Build tools:"
+          ls -la "$ANDROID_HOME/build-tools"
+
+          echo "AIDL:"
+          ls -la "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          test -f "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          chmod +x "$ANDROID_HOME/build-tools/33.0.2/aidl"
+
+          "$ANDROID_HOME/build-tools/33.0.2/aidl" 2>&1 || true
 
       - name: Build APK
         run: |
@@ -67,7 +125,6 @@ jobs:
       - name: Find APK
         if: always()
         run: |
-          echo "Searching for APK..."
           find . -type f -name "*.apk" -print || true
 
       - name: Upload APK
