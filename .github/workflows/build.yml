@@ -1,23 +1,88 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            wget \
+            build-essential \
+            autoconf \
+            automake \
+            libtool \
+            libltdl-dev \
+            pkg-config \
+            cmake \
+            libffi-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            openjdk-17-jdk
+
+      - name: Install Buildozer
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install "Cython<3"
+          python -m pip install buildozer
+
+      - name: Clean Buildozer
+        run: |
+          rm -rf "$HOME/.buildozer"
+          rm -rf ".buildozer"
+
       - name: Build APK
         run: |
           set +e
-
           timeout 45m buildozer -v android debug 2>&1 | tee build.log
-
           STATUS=${PIPESTATUS[0]}
-
-          echo "=============================="
           echo "BUILDOZER EXIT CODE: $STATUS"
-          echo "=============================="
-
           echo "===== LAST 100 LINES ====="
           tail -n 100 build.log
-
           exit $STATUS
-                - name: Upload build log
+
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: build-log
           path: build.log
           if-no-files-found: warn
+
+      - name: Find APK
+        if: always()
+        run: |
+          find . -type f -name "*.apk" -print || true
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: guard-app-apk
+          path: bin/*.apk
+          if-no-files-found: error
