@@ -1,35 +1,23 @@
+```yaml
 name: Build APK
 
 on:
   push:
   workflow_dispatch:
 
+env:
+  PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: "0"
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Start
-        run: echo "GitHub Actions started successfully"
-
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check project files
-        run: |
-          echo "Files in project:"
-          ls -la
-
-          echo ""
-          echo "Checking buildozer.spec:"
-          test -f buildozer.spec && echo "buildozer.spec FOUND" || (echo "buildozer.spec NOT FOUND" && exit 1)
-
-          echo ""
-          echo "Checking main.py:"
-          test -f main.py && echo "main.py FOUND" || echo "main.py NOT FOUND"
-
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.10"
 
@@ -39,7 +27,7 @@ jobs:
           java-version: "17"
           distribution: "temurin"
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -47,35 +35,99 @@ jobs:
             zip \
             unzip \
             openjdk-17-jdk \
-            build-essential \
             autoconf \
             automake \
             libtool \
+            libltdl-dev \
             pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
+            build-essential \
             cmake \
             libffi-dev \
-            libssl-dev
+            libssl-dev \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev
 
-      - name: Install Python packages
+      - name: Install Buildozer
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install "Cython<3"
-          python -m pip install buildozer
+          python -m pip install --upgrade buildozer
 
-      - name: Check versions
+      - name: Show versions
         run: |
           python --version
           java -version
-          cython --version
           buildozer --version
+          cython --version
 
-      - name: Clean Buildozer
+      - name: Check project
         run: |
-          rm -rf .buildozer
+          test -f buildozer.spec
+          echo "buildozer.spec found"
+
+      - name: Accept Android SDK licenses
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("buildozer.spec")
+          text = p.read_text()
+
+          lines = text.splitlines()
+          found = False
+          output = []
+
+          for line in lines:
+              stripped = line.strip()
+
+              if stripped.startswith("android.accept_sdk_license"):
+                  output.append("android.accept_sdk_license = True")
+                  found = True
+              else:
+                  output.append(line)
+
+          if not found:
+              output.append("")
+              output.append("[app]")
+              output.append("android.accept_sdk_license = True")
+
+          p.write_text("\n".join(output) + "\n")
+          PY
+
+          echo "===== android.accept_sdk_license ====="
+          grep -n "android.accept_sdk_license" buildozer.spec || true
+
+      - name: Remove old Android build
+        run: |
           rm -rf ~/.buildozer
+          rm -rf .buildozer
+
+      - name: Download Android SDK and Build Tools
+        run: |
+          buildozer android p4a -- --help
+
+      - name: Verify AIDL
+        run: |
+          echo "===== Searching for AIDL ====="
+          find ~/.buildozer -type f -name aidl -print || true
+
+          AIDL=$(find ~/.buildozer/android/platform/android-sdk/build-tools -type f -name aidl | sort -V | tail -n 1)
+
+          if [ -z "$AIDL" ]; then
+            echo "ERROR: AIDL was not installed."
+            echo "===== BUILD-TOOLS ====="
+            find ~/.buildozer/android/platform/android-sdk/build-tools -maxdepth 2 -type f -print || true
+            exit 1
+          fi
+
+          echo "AIDL found at:"
+          echo "$AIDL"
+
+          chmod +x "$AIDL"
+
+          echo "Testing AIDL:"
+          "$AIDL" || test $? -eq 1
 
       - name: Build APK
         run: |
@@ -84,7 +136,7 @@ jobs:
       - name: Find APK
         if: always()
         run: |
-          echo "Searching for APK..."
+          echo "===== APK FILES ====="
           find . -type f -name "*.apk" -print || true
 
       - name: Upload APK
@@ -94,3 +146,4 @@ jobs:
           name: guard-app-apk
           path: bin/*.apk
           if-no-files-found: error
+```
